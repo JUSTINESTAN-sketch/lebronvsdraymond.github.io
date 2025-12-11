@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Galaga Endless Waves</title>
+<style>
+  body {
+    margin: 0;
+    background: black;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center; 
+    height: 100vh;
+    flex-direction: column;
+  }
+  #title {
+    color: white;
+    font-family: Arial, sans-serif;
+    font-size: 40px;
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 20px;
+    text-shadow: 2px 2px 5px #000;
+  }
+  canvas {
+    background: #030a19;
+    display: block;
+    border: 2px solid white;
+  }
+  #scoreBox, #livesBox {
+    position: absolute;
+    left: 10px;
+    color: white;
+    font-family: Arial;
+    font-size: 20px;
+  }
+  #livesBox { top: 40px; }
+  #gameOver {
+    position: absolute;
+    color: white;
+    font-family: Arial;
+    font-size: 40px;
+    display: none;
+    text-align: center;
+    width: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+  #restartBtn {
+    position: absolute;
+    top: 60%;
+    font-size: 20px;
+    padding: 10px 20px;
+    display: none;
+    cursor: pointer;
+  }
+</style>
+</head>
+
+<body>
+<div id="title">LEBRON JAMES V DRAYMOND GREEN</div>
+<div id="scoreBox">Score: 0</div>
+<div id="livesBox">Lives: 3</div>
+<div id="gameOver">GAME OVER</div>
+<button id="restartBtn">Restart</button>
+
+<canvas id="game" width="500" height="600"></canvas>
+
+<script>
+// ========================================================
+// CANVAS
+// ========================================================
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const scoreBox = document.getElementById("scoreBox");
+const livesBox = document.getElementById("livesBox");
+const gameOverText = document.getElementById("gameOver");
+const restartBtn = document.getElementById("restartBtn");
+
+// ========================================================
+// IMAGES
+// ========================================================
+const shipImg = new Image();
+shipImg.src = "lebronjames.png";
+
+const enemyImg = new Image();
+enemyImg.src = "Draymond-Green-Transparent-Background.png";
+
+// ========================================================
+// PLAYER
+// ========================================================
+let player, left, right, space;
+let bullets, enemies;
+let score, enemyMoveTime, spawnTimer, enemySpeed;
+let gameRunning, shootCooldown;
+
+function initGame() {
+  player = { x: canvas.width/2-20, y: canvas.height-70, w:40, h:40, speed:5, lives:3 };
+  left = false; right = false; space = false;
+  bullets = [];
+  enemies = [];
+  score = 0;
+  enemyMoveTime = 0;
+  spawnTimer = 0;
+  enemySpeed = 1.0; // faster downward speed
+  gameRunning = true;
+  shootCooldown = 0;
+  scoreBox.textContent = "Score: "+score;
+  livesBox.textContent = "Lives: "+player.lives;
+  gameOverText.style.display = "none";
+  restartBtn.style.display = "none";
+}
+
+// ========================================================
+// INPUT
+// ========================================================
+document.addEventListener("keydown", e => {
+  if(e.key==="ArrowLeft") left = true;
+  if(e.key==="ArrowRight") right = true;
+  if(e.key===" ") space = true;
+});
+document.addEventListener("keyup", e => {
+  if(e.key==="ArrowLeft") left = false;
+  if(e.key==="ArrowRight") right = false;
+  if(e.key===" ") space = false;
+});
+
+// ========================================================
+// BULLETS
+// ========================================================
+function shoot() {
+  bullets.push({x:player.x+player.w/2-2, y:player.y-10, w:4, h:10});
+}
+
+// ========================================================
+// ENEMIES
+// ========================================================
+function spawnEnemyRow() {
+  let cols = Math.floor(Math.random()*3)+3; // 3-5 enemies
+  for(let c=0;c<cols;c++){
+    enemies.push({
+      x:40+c*80,
+      y:-30,
+      w:40, h:30,
+      alive:true,
+      speed:enemySpeed,
+      waveOffset: Math.random()*Math.PI*2
+    });
+  }
+}
+
+// ========================================================
+// COLLISION
+// ========================================================
+function coll(a,b){
+  return a.x<a.x+b.w && a.x+a.w>b.x && a.y<a.y+b.h && a.y+a.h>b.y;
+}
+
+// ========================================================
+// GAME LOOP
+// ========================================================
+function loop(){
+  if(!gameRunning) return;
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  enemyMoveTime +=0.02;
+
+  // PLAYER MOVE
+  if(left) player.x -= player.speed;
+  if(right) player.x += player.speed;
+  player.x = Math.max(0, Math.min(canvas.width-player.w, player.x));
+
+  // PLAYER SHOOT
+  if(space && shootCooldown<=0){
+    shoot();
+    shootCooldown = 20;
+  }
+  shootCooldown--;
+
+  // DRAW PLAYER
+  ctx.drawImage(shipImg, player.x, player.y, player.w, player.h);
+
+  // BULLETS
+  bullets = bullets.filter(b=>b.y>-20);
+  bullets.forEach(b=>{
+    b.y -= 7;
+    ctx.fillStyle="yellow";
+    ctx.fillRect(b.x,b.y,b.w,b.h);
+  });
+
+  // ENEMY MOVEMENT
+  enemies.forEach(e=>{
+    if(!e.alive) return;
+    e.x += Math.sin(enemyMoveTime+e.waveOffset)*0.3;
+    e.y += e.speed; // faster downward movement
+
+    ctx.drawImage(enemyImg, e.x, e.y, e.w, e.h);
+
+    // COLLISION WITH PLAYER
+    if(coll(e, player)){
+      e.alive=false;
+      player.lives--;
+      livesBox.textContent = "Lives: "+player.lives;
+      if(player.lives<=0) gameOver();
+    }
+
+    // IF ENEMY PASSES PLAYER
+    if(e.y + e.h >= canvas.height){
+      e.alive = false;
+      player.lives--;
+      livesBox.textContent = "Lives: "+player.lives;
+      if(player.lives<=0) gameOver();
+    }
+  });
+
+  // BULLETS HIT ENEMIES
+  bullets.forEach(b=>{
+    enemies.forEach(e=>{
+      if(e.alive && coll(b,e)){
+        e.alive=false;
+        b.y=-999;
+        score+=10;
+      }
+    });
+  });
+
+  scoreBox.textContent = "Score: "+score;
+
+  // REMOVE DEAD ENEMIES
+  enemies = enemies.filter(e=>e.alive || e.y<canvas.height+50);
+
+  // ENDLESS SPAWN
+  spawnTimer++;
+  if(spawnTimer>150){ // spawn more often due to faster enemies
+    spawnEnemyRow();
+    spawnTimer=0;
+    enemySpeed += 0.02; // slightly harder over time
+  }
+
+  requestAnimationFrame(loop);
+}
+
+function gameOver(){
+  gameRunning=false;
+  gameOverText.style.display="block";
+  restartBtn.style.display="block";
+}
+
+// RESTART BUTTON
+restartBtn.addEventListener("click", ()=>{
+  initGame();
+  loop();
+});
+
+// START GAME
+initGame();
+loop();
+
+</script>
+
+</body>
+</html>
+
+
+ 
